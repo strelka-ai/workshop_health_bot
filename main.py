@@ -8,8 +8,8 @@ bot = telebot.TeleBot(token=token)
 print(f'Your token is: {token}')
 print('Start pooling...')
 
-dialog = Dialog(bot, {
+dialog_instance = Dialog(bot, {
     'voc': 'voc.yaml',
 })
 
-dialog.start()
+dialog_instance.start()

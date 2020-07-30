@@ -30,17 +30,28 @@ class AbsNode(object):
     - и даже синтаксический разбор
     '''
 
-    def __init__(self, dialog, node_name, node_config) -> None:
+    def __init__(self, dialog, message, node_name, node_config) -> None:
         '''
         Конструктор ноды
-        :param dialog: ссылка на объект диалога
-        :param node_name: Имя ноды
-        :param node_config: Конфигурация ноды
+        :param dialog:
+        :param message:
+        :param node_name:
+        :param node_config:
         '''
+
         super().__init__()
         self._dialog = dialog
+        self._message = message
         self._name = node_name
         self._config = node_config.copy()
+
+    @property
+    def is_reset(self):
+        '''
+        Возвращает, является ли нода ресетом для сессии (удаляет все теги)
+        :return:
+        '''
+        return self._config.get('reset', False)
 
     def _get_phrase(self, the_key='q'):
         '''
@@ -48,6 +59,7 @@ class AbsNode(object):
         :param the_key: ключ фразы, по умолчанию q -- вопрос
         :return: фраза
         '''
+
         phrase = self._config.get(the_key, None)
 
         # если фраз несколько, то берем на угад любую
@@ -77,6 +89,8 @@ class AbsNode(object):
         :return:
         '''
 
+        message = self._message
+
         # специальный объект разметки, встраиваемая клавиатура
         markup = telebot.types.InlineKeyboardMarkup(row_width=row_width)
 
@@ -89,6 +103,9 @@ class AbsNode(object):
         for i, a in enumerate(answers):
 
             if 'name' not in a:
+                continue
+
+            if not self._is_answer_visible(a):
                 continue
 
             # если в GOTO указана ссылка, то сделаем специальную кнопку с внешней ссылкой
@@ -117,12 +134,14 @@ class AbsNode(object):
         '''
         return self._config.get('photo', None)
 
-    def say(self, message):
+    def say(self):
         '''
         Сказать фразу от имени бота
         :param message: сообщение пользователя
         :return:
         '''
+
+        message = self._message
 
         # собираем: фразу, фото, кнопки
         phrase = self._get_phrase()
@@ -145,12 +164,15 @@ class AbsNode(object):
                                           text=phrase,
                                           reply_markup=buttons)
 
-    def say_wrong(self, message):
+    def say_wrong(self):
         '''
         Сказать что-то на непредвиденный ответ пользователя
         :param message: сообщение пользователя
         :return:
         '''
+
+        message = self._message
+
         phrase = self._get_phrase(the_key='wrong')
 
         if phrase is None:
@@ -161,7 +183,50 @@ class AbsNode(object):
 
         self._dialog.bot.send_message(message.chat.id, phrase)
 
-    def check_answer(self, message, data):
+    def save_tags(self, answer):
+        '''
+        Сохраняет тэги ответа в сессию пользователя
+        :param answer:
+        :return:
+        '''
+
+        if 'tags' not in answer:
+            return
+
+        tags = answer['tags']
+        if not isinstance(tags, list):
+            tags = [tags]
+
+        self._dialog.save_tags(self._message.chat.id, tags)
+
+    def get_tags(self):
+        '''
+        Возвращает все теги сессии пользователя
+        :return:
+        '''
+
+        return self._dialog.get_tags(self._message.chat.id)
+
+    def _is_answer_visible(self, answer):
+        '''
+        Проверяет условие "видимости" ответа, если оно логически верно -- то ответ видно
+        :param answer:
+        :return:
+        '''
+        if 'if' not in answer:
+            return True
+
+        def condition_check(condition):
+            try:
+                tags = self.get_tags()
+                exec('condition_result = bool(' + condition + ')', tags)
+                return tags['condition_result']
+            except:
+                return False
+
+        return condition_check(answer['if'])
+
+    def check_answer(self, data):
         '''
         Проверить, что же сказал пользователь, и отдать следующую ноду
         :param message: сообщение пользователя
@@ -169,35 +234,44 @@ class AbsNode(object):
         :return: следующая нода или None
         '''
 
+        message = self._message
+
         # берем все ответы
         answers = self._get_answers()
 
         # ходим по каждому из ответов
         for i, a in enumerate(answers):
 
+            if not self._is_answer_visible(a):
+                continue
+
             # если кнопка не нажата, ответ пользователя текстовый, и ответ ноды, как ни странно, тоже!
             # то смотрим, совпадает ли ответ морфологически
             if data is None and message.content_type == 'text' and 'words' in a:
-                if self.match_words(message=message, words=a['words']):
+                if self.match_words(words=a['words']):
+                    self.save_tags(a)
                     return a['goto']
 
             # если нажали на пнопку
             if data is not None and i == int(data):
+                self.save_tags(a)
                 return a['goto']
 
             # если прислали некий тип данных, указанный в ответах (например, локация)
             if 'type' in a and a['type'] == message.content_type:
+                self.save_tags(a)
                 return a['goto']
 
         return None
 
     @staticmethod
-    def fabric(dialog, node_name):
+    def fabric(dialog, message, node_name):
         '''
         Это фабрика нод, она умеет создавать ноды по имени
-        :param dialog: ссылка на диалог
-        :param node_name: имя ноды
-        :return: нода
+        :param dialog:
+        :param message:
+        :param node_name:
+        :return:
         '''
 
         # берем конфигурацию ноды, выявляем ее тип
@@ -209,18 +283,20 @@ class AbsNode(object):
         if class_name in globals():
             class_type = globals()[class_name]
             # возвращаем объект ноды
-            return class_type(dialog, node_name, node_config)
+            return class_type(dialog, message, node_name, node_config)
 
         # ругаемся, если ничего не нашли
         raise IndexError(f'There is no node with type {node_type}')
 
-    def match_words(self, message, words):
+    def match_words(self, words):
         '''
         Синтаксический анализатор, который сравнивает то что сказал пользователь с некими якорными словами
         :param message:
         :param words:
         :return:
         '''
+
+        message = self._message
 
         # слова пользователя
         message_words = message.text.split(' ')
@@ -282,7 +358,7 @@ class DialogSession(object):
     Состоит из текущей ноды, временной метки начала чата, переменных данного чата и идентификатора чата
     '''
 
-    __slots__ = ['node_name', 'ts', 'variables', 'chat_id']
+    __slots__ = ['node_name', 'ts', 'tags', 'chat_id']
 
     def __init__(self, **kwargs) -> None:
         super().__init__()
@@ -327,6 +403,7 @@ class Dialog(object):
         self._bot = bot
         self._config = config.copy()
         self._voc = self._load_voc()
+        self._variables = self._get_voc_tags()
 
         # это пользовательские сессии
         self._sessions = self._load_sessions()
@@ -337,8 +414,6 @@ class Dialog(object):
 
         # это библиотека морфологии, она нам нужна для морфоанализа слов
         self._morph = pymorphy2.MorphAnalyzer()
-
-        self._variables = {}
 
     @property
     def bot(self):
@@ -351,6 +426,33 @@ class Dialog(object):
     @property
     def morph(self):
         return self._morph
+
+    @property
+    def variables(self):
+        return self._variables
+
+    def _get_voc_tags(self):
+        '''
+        Возвращает в качестве "переменных" диалога все возможные имена тэгов
+        :return:
+        '''
+        variables = set()
+        for node_name, node in self._voc['nodes'].items():
+            answers = node.get('a', [])
+
+            if not isinstance(answers, list):
+                answers = [answers]
+
+            for a in answers:
+                tags = a.get('tags', [])
+
+                if not isinstance(tags, list):
+                    tags = [tags]
+
+                variables.update(tags)
+
+        return variables
+
 
     def _load_sessions(self):
         '''
@@ -369,7 +471,7 @@ class Dialog(object):
         with open(self._config['voc'], 'r', encoding='utf-8') as f:
             return yaml.load(f, Loader=yaml.FullLoader)
 
-    def _get_session(self, chat_id):
+    def get_session(self, chat_id):
         '''
         Берет текущую сессию чата, или возвращает None если ее нет
         :param chat_id: идентификатор чата
@@ -377,6 +479,65 @@ class Dialog(object):
         '''
 
         return self._sessions.get(chat_id, None)
+
+    def new_session(self, chat_id, node_name=None, tags=None):
+        '''
+        Создает новую сессию
+        :param chat_id:
+        :param node_name:
+        :param tags:
+        :return:
+        '''
+        self._sessions[chat_id] = DialogSession(
+            node_name=node_name,
+            ts=time.time(),
+            chat_id=chat_id,
+            tags=tags if tags is not None else dict()
+        )
+
+    def get_tags(self, chat_id):
+        '''
+        Возвращает все теги сессии диалога, даже те которые еще не отыграли: они будут с нулевыми значениями
+        :param chat_id:
+        :return:
+        '''
+        sess = self.get_session(chat_id)
+
+        if sess is None:
+            tags = {}
+        elif sess.tags is None:
+            tags = {}
+        else:
+            tags = sess.tags
+
+        return {
+            v: tags[v] if v in tags else 0
+            for v in self._variables
+        }
+
+    def save_tags(self, chat_id, tags):
+        '''
+        Сохраняет все указанные теги в сессию
+        :param chat_id:
+        :param tags:
+        :return:
+        '''
+
+        if chat_id not in self._sessions:
+            self.new_session(chat_id)
+            sess_tags = {}
+        else:
+            sess_tags = self._sessions[chat_id].tags
+
+        if sess_tags is None:
+            sess_tags = dict()
+
+        sess_tags.update({
+            t: sess_tags[t] + 1 if t in sess_tags else 1
+            for t in tags
+        })
+
+        self._sessions[chat_id].set(tags=sess_tags)
 
     def _play_node(self, message, node_name):
         '''
@@ -386,16 +547,19 @@ class Dialog(object):
         :return: ничего
         '''
 
-        node = AbsNode.fabric(self, node_name)
-        node.say(message)
+        node = AbsNode.fabric(self, message, node_name)
+        node.say()
 
         if message.chat.id not in self._sessions:
-            self._sessions[message.chat.id] = DialogSession(
-                node_name=node_name,
-                ts=time.time(),
-                chat_id=message.chat.id)
+            self.new_session(
+                chat_id=message.chat.id,
+                node_name=node_name
+            )
         else:
             self._sessions[message.chat.id].set(node_name=node_name)
+
+        if node.is_reset:
+            self._sessions[message.chat.id].set(tags=None)
 
     def _dialog(self, message, data=None):
         '''
@@ -409,7 +573,7 @@ class Dialog(object):
         self._bot.send_chat_action(message.chat.id, 'typing')
 
         # попытаемся взять текущую ноду для данного чата
-        the_session = self._get_session(message.chat.id)
+        the_session = self.get_session(message.chat.id)
 
         # если диалога еще нет, то идем в самое начало
         if the_session is None or the_session.node_name is None:
@@ -418,15 +582,15 @@ class Dialog(object):
 
         try:
 
-            current_node = AbsNode.fabric(self, the_session.node_name)
+            current_node = AbsNode.fabric(self, message, the_session.node_name)
 
             # проверяем ответ пользователя, и определяемся со следующей нодой
-            next_node = current_node.check_answer(message, data)
+            next_node = current_node.check_answer(data)
 
             # если нода не смогла определиться, то, скорее всего, это ошибка,
             # а значит идем в начало
             if next_node is None:
-                current_node.say_wrong(message)
+                current_node.say_wrong()
                 return
 
             # отыгрываем следующую ноду

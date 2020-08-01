@@ -4,6 +4,8 @@ import telebot
 import random
 import pymorphy2
 from urllib.parse import urlparse
+from peewee import PostgresqlDatabase
+from database import Session, User, Chat, Message
 
 
 def is_url(url: str):
@@ -351,41 +353,6 @@ class LocationNode(AbsNode):
     pass
 
 
-class DialogSession(object):
-    '''
-    Этот класс реализует объект сессии, потом он у нас отправится в базу данных
-    и сессия будет переключаться именно там
-    Состоит из текущей ноды, временной метки начала чата, переменных данного чата и идентификатора чата
-    '''
-
-    __slots__ = ['node_name', 'ts', 'tags', 'chat_id']
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__()
-        self.set(**kwargs)
-
-    def set(self, **kwargs):
-        '''
-        Установка значений аргументов сессии
-        :param kwargs: аргументы
-        :return:
-        '''
-        for item in self.__slots__:
-            if item in kwargs:
-                setattr(self, item, kwargs[item])
-
-    def to_dict(self):
-        '''
-        Перевод аргументов сессии в вид словаря
-        :return:
-        '''
-
-        return {
-            item: getattr(self, item)
-            for item in self.__slots__
-        }
-
-
 class Dialog(object):
     '''
     Класс, реализующий диалог чатбота
@@ -405,8 +372,6 @@ class Dialog(object):
         self._voc = self._load_voc()
         self._variables = self._get_voc_tags()
 
-        # это пользовательские сессии
-        self._sessions = self._load_sessions()
 
         # здесь мы определяем ноду по умолчанию, с которой будем начинать
         # и на которую будем переходить в случае ошибки диалога
@@ -453,15 +418,6 @@ class Dialog(object):
 
         return variables
 
-
-    def _load_sessions(self):
-        '''
-        Загружает пользовательские сессии. В данный момент это всего лишь пустой словарь
-        :return: словарь сессий
-        '''
-
-        return dict()
-
     def _load_voc(self):
         '''
         Загружает словарь диалогов
@@ -478,7 +434,7 @@ class Dialog(object):
         :return: сессия (редуцирована до имени текущей ноды)
         '''
 
-        return self._sessions.get(chat_id, None)
+        return Session.get_or_none(chat_id)
 
     def new_session(self, chat_id, node_name=None, tags=None):
         '''
@@ -488,12 +444,20 @@ class Dialog(object):
         :param tags:
         :return:
         '''
-        self._sessions[chat_id] = DialogSession(
+
+        saving_tags = tags if tags is not None else dict()
+        return Session.insert(
             node_name=node_name,
-            ts=time.time(),
             chat_id=chat_id,
-            tags=tags if tags is not None else dict()
-        )
+            tags=saving_tags
+        ).on_conflict(
+            conflict_target=Session.chat_id,
+            preserve=(Session.chat_id,),
+            update={
+                Session.node_name: node_name,
+                Session.tags: saving_tags
+            }
+        ).execute()
 
     def get_tags(self, chat_id):
         '''
@@ -523,11 +487,13 @@ class Dialog(object):
         :return:
         '''
 
-        if chat_id not in self._sessions:
+        sess = Session.get_or_none(chat_id)
+        if sess is None:
             self.new_session(chat_id)
+            sess = Session.get_or_create(chat_id)
             sess_tags = {}
         else:
-            sess_tags = self._sessions[chat_id].tags
+            sess_tags = sess.tags
 
         if sess_tags is None:
             sess_tags = dict()
@@ -537,7 +503,8 @@ class Dialog(object):
             for t in tags
         })
 
-        self._sessions[chat_id].set(tags=sess_tags)
+        sess.tags = sess_tags
+        sess.save()
 
     def _play_node(self, message, node_name):
         '''
@@ -550,16 +517,65 @@ class Dialog(object):
         node = AbsNode.fabric(self, message, node_name)
         node.say()
 
-        if message.chat.id not in self._sessions:
+        sess = Session.get_or_none(chat_id=message.chat.id)
+        if sess is None:
             self.new_session(
                 chat_id=message.chat.id,
                 node_name=node_name
             )
         else:
-            self._sessions[message.chat.id].set(node_name=node_name)
+            sess.node_name = node_name
+            if node.is_reset:
+                sess.tags = dict()
 
-        if node.is_reset:
-            self._sessions[message.chat.id].set(tags=None)
+            sess.save()
+
+    def _play_begin(self, message):
+        '''
+        Отыгрывает начало общения
+        :param message:
+        :return:
+        '''
+
+        if message.from_user.is_bot:
+            return
+
+        User.insert(
+            **message.json['from']
+        ).on_conflict('ignore').execute()
+
+        Chat.insert(
+            id=message.chat.id,
+            type=message.chat.type,
+            user_id=message.from_user.id
+        ).on_conflict('ignore').execute()
+
+        self._play_node(message, self._default_node)
+
+    def _save_message(self, message, data):
+        '''
+        Сохранение сообщения пользователя в БД
+        :param message: сообщение
+        :param data: код кнопки
+        :return:
+        '''
+
+        content_type = message.content_type
+        if content_type == 'text':
+            content_type = 'plain'
+        elif data is not None:
+            content_type = 'variant'
+
+        Message.insert(
+            id=message.message_id,
+            chat_id=message.chat.id,
+            type=content_type,
+            date=message.date,
+
+            text=message.text,
+            button=data,
+            location=message.json.get('location', None)
+        ).on_conflict('ignore').execute()
 
     def _dialog(self, message, data=None):
         '''
@@ -572,12 +588,14 @@ class Dialog(object):
         # отправляем пользователю мета-сообщение "Бот печатает..."
         self._bot.send_chat_action(message.chat.id, 'typing')
 
+        self._save_message(message, data)
+
         # попытаемся взять текущую ноду для данного чата
-        the_session = self.get_session(message.chat.id)
+        the_session = Session.get_or_none(chat_id=message.chat.id)
 
         # если диалога еще нет, то идем в самое начало
         if the_session is None or the_session.node_name is None:
-            self._play_node(message, self._default_node)
+            self._play_begin(message)
             return
 
         try:
@@ -629,6 +647,7 @@ class Dialog(object):
         :param node_name: имя ноды
         :return: конфигурация
         '''
+
         return self._voc['nodes'][node_name]
 
     def start(self):

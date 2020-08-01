@@ -1,0 +1,5 @@
+pyTelegramBotAPI
+pymorphy2
+pyyaml
+peewee
+psycopg2-binary

@@ -1,0 +1,32 @@
+version: '3'
+
+services:
+
+    bot:
+        build: ./code/bot
+#        volumes:
+#            - ./backend/cwd_metrics:/code
+#        ports:
+#            - "8883:8080"
+        restart: always
+        networks:
+            - bot-network
+
+    pgsql:
+        image: postgres:12
+        volumes:
+            - ./data:/data/pg
+        ports:
+            - 5432:5432
+        networks:
+            - bot-network
+        environment:
+            POSTGRES_PASSWORD: Mhr93uiifdenm78g
+            POSTGRES_USER: postgres
+            PGDATA: /data/pg
+        restart: always
+
+
+networks:
+    bot-network:
+        driver: bridge

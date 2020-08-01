@@ -8,6 +8,13 @@ services:
 #            - ./backend/cwd_metrics:/code
 #        ports:
 #            - "8883:8080"
+        environment:
+            POSTGRES_PASSWORD: MwSVez5TRE0qidnz
+            POSTGRES_USER: postgres
+            DB_HOST: pg
+            DB_NAME: chatbot
+            VOC_FILE: '/code/voc.yaml'
+            TOKEN: '723314573:AAH5-onyzwyA1fMDnk73GLBQ7sE2a2j_qD4'
         restart: always
         networks:
             - bot-network
@@ -16,12 +23,13 @@ services:
         image: postgres:12
         volumes:
             - ./data:/data/pg
+            - ./scripts:/docker-entrypoint-initdb.d
         ports:
-            - 5432:5432
+            - 54320:5432
         networks:
             - bot-network
         environment:
-            POSTGRES_PASSWORD: Mhr93uiifdenm78g
+            POSTGRES_PASSWORD: MwSVez5TRE0qidnz
             POSTGRES_USER: postgres
             PGDATA: /data/pg
         restart: always

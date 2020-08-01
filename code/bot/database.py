@@ -1,15 +1,24 @@
+import os
 import datetime
 from peewee import PostgresqlDatabase, Model, PrimaryKeyField, TextField, \
     DoubleField, IntegerField, BooleanField, DateTimeField, BareField
 
 from playhouse.postgres_ext import PostgresqlExtDatabase, JSONField, BinaryJSONField
+from dotenv import load_dotenv, dotenv_values
+
+load_dotenv()
+
+config = {
+    **dict(dotenv_values()),
+    **dict(os.environ),
+}
 
 # соединение с БД
 db = PostgresqlExtDatabase(
-    'DB_NAME',
-    user='DB_USER',
-    password='DB_PASS',
-    host='DB_HOST',
+    config['DB_NAME'],
+    user=config['POSTGRES_USER'],
+    password=config['POSTGRES_PASSWORD'],
+    host=config['DB_HOST'],
     autocommit=True,
     autorollback=True
 )

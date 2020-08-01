@@ -1,5 +1,6 @@
 pyTelegramBotAPI
 pymorphy2
 pyyaml
-peewee
 psycopg2-binary
+peewee
+python-dotenv

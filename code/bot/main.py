@@ -23,7 +23,7 @@ if __name__ == '__main__':
     init_tables()
 
     dialog_instance = Dialog(bot, {
-        'voc': 'voc.yaml',
+        'voc': config['VOC_FILE'],
     })
 
     print(f'Your token is: {token}')

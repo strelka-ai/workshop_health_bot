@@ -15,7 +15,7 @@ config = {
 
 # соединение с БД
 db = PostgresqlExtDatabase(
-    config['DB_NAME'],
+    config['POSTGRES_DB'],
     user=config['POSTGRES_USER'],
     password=config['POSTGRES_PASSWORD'],
     host=config['DB_HOST'],

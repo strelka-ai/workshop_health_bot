@@ -1,2 +1,0 @@
-CREATE DATABASE chatbot;
-GRANT ALL PRIVILEGES ON DATABASE chatbot TO postgres;

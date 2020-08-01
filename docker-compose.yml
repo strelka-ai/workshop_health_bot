@@ -11,10 +11,12 @@ services:
         environment:
             POSTGRES_PASSWORD: MwSVez5TRE0qidnz
             POSTGRES_USER: postgres
-            DB_HOST: pg
-            DB_NAME: chatbot
+            POSTGRES_DB: postgres
+            DB_HOST: pgsql
             VOC_FILE: '/code/voc.yaml'
             TOKEN: '723314573:AAH5-onyzwyA1fMDnk73GLBQ7sE2a2j_qD4'
+        links:
+            - "pgsql"
         restart: always
         networks:
             - bot-network
@@ -22,7 +24,7 @@ services:
     pgsql:
         image: postgres:12
         volumes:
-            - ./data:/data/pg
+#            - ./data:/data/pg
             - ./scripts:/docker-entrypoint-initdb.d
         ports:
             - 54320:5432
@@ -31,6 +33,7 @@ services:
         environment:
             POSTGRES_PASSWORD: MwSVez5TRE0qidnz
             POSTGRES_USER: postgres
+            POSTGRES_DB: postgres
             PGDATA: /data/pg
         restart: always
 

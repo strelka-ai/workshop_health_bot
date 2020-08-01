@@ -4,4 +4,3 @@ pyyaml
 psycopg2-binary
 peewee
 python-dotenv
-sanic

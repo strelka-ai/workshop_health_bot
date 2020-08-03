@@ -1,0 +1,186 @@
+nodes:
+  begin:
+    type: variant
+    reset: true
+    photo: 'https://images.unsplash.com/photo-1593642634315-48f5414c3ad9?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=640&q=80'
+    q:
+      - 'Привет, начнем?'
+      - 'Приступим?'
+      - 'Привет! давай поговорим!'
+    a:
+      name: 'Да!'
+      goto: q0
+
+  q0:
+    type: location
+    wrong: 'Я теня не понял, прости :( хочешь, просто скажи "нет" и продоллжим'
+    q: 'А где ты живешь? Прикрепи мне пожалуйста локацию! Помнишь, там такой значок скрепочка, дальше выбрать поделиться локацией...'
+    a:
+      - words:
+          - нет
+        goto: q1
+
+      - type: location
+        goto: q1
+
+      - name: 'Не скажу я, где я жвиу!'
+        goto: q1
+
+  q1:
+    type: plain
+    q: 'Как тебя зовут?'
+    a:
+      words: '*'
+      goto: q1_1
+
+  q1_1:
+    type: plain
+    q: 'выбери число'
+    a:
+      - name: '1'
+        goto: q1_1
+        tags: one
+        if: not one
+
+      - name: '2'
+        goto: q1_1
+        tags: one
+        if: not one
+
+      - name: '3'
+        goto: q1_1
+        tags: three
+        if: not three
+
+      - name: '4'
+        goto: q1_1
+        tags: four
+        if: not four
+
+      - name: '5'
+        goto: q1_1
+        tags: five
+        if: not five
+
+      - name: '6'
+        goto: q1_1
+        if: one > 0 and four > 0
+
+      - name: 'всё, хватит!'
+        goto: q2
+
+  q2:
+    type: plain
+    q: 'Сколько тебе лет?'
+    a:
+      words: '*'
+      goto: q2_2
+
+  q2_2:
+    type: variant
+    q: 'Нравятся ли тебе бананы?'
+    a:
+      - name: "Да, не нравятся"
+        goto: 'q3'
+
+      - name: "Нет, не нравятся"
+        goto: 'q3'
+
+      - name: "Ну и вопрос..."
+        goto: 'q3'
+
+      - words:
+          - отстань
+          - тьфу
+        goto: q2_3
+
+      - words: '*'
+        goto: q3
+
+  q2_3:
+    type: plain
+    q: 'Какая грубость! выговорись?'
+    a:
+      words: '*'
+      goto: q3
+
+  q3:
+    type: variant
+    q: 'Чем ты занимаешься в городе?'
+    a:
+      - name: 'гуляю'
+        goto: q_walk
+
+      - name: 'катаюсь на велике'
+        goto: q_bike
+
+      - name: 'сижу дома'
+        goto: q_home
+
+      - words: '*'
+        goto: q_thanks
+
+  q_walk:
+    q: 'Обожаю прогулки! Расскажи про свой ежедневный свой маршрут?'
+    a:
+      words: '*'
+      goto: end
+
+  q_bike:
+    q: 'Велики -- сила! А куда катаешь?'
+    a:
+      words: '*'
+      goto: end
+
+  q_home:
+    q: 'Ой, а почему?'
+    a:
+      - words:
+          - 'надоело'
+          - 'скучно'
+          - 'грусть'
+        goto: q_noblu
+
+      - words:
+          - 'страх'
+          - 'боюсь'
+          - 'опасно'
+        goto: q_noharm
+
+      - words: '*'
+        goto: q_thanks
+
+  q_noblu:
+    type: variant
+    q: 'Эй.. Всё ведь не так плохо, ты же знаешь! Не грусти! Обещаешь? =)'
+    a:
+      - name: 'Да!'
+        goto: end
+      - name: 'Сайт с картой города'
+        goto: 'https://maps.yandex.ru'
+
+  q_noharm:
+    type: variant
+    q: 'Знаешь, тебе нечего бояться, я с тобой! И просто будь осторожен. Обещаешь что не будешь бояться?'
+    a:
+      - name: 'Да!'
+        goto: end
+      - name: 'Сайт экстренных служб'
+        goto: 'https://112.mosreg.ru/'
+
+  q_thanks:
+    type: variant
+    q: 'Спасибо что поделился со мной своей историей! Обязательно приходи пообщаться, если захочешь!'
+    a:
+      name: 'Заново'
+      goto: begin
+
+  end:
+    type: variant
+    q: 'Спасибо тебе большое за общение!'
+    a:
+      name: 'Заново'
+      goto: begin
+
+default: begin
+wrong: 'Ты несешь мне какую-то дичь!'

@@ -39,11 +39,11 @@ class User(BaseModel):
     '''
 
     id = PrimaryKeyField(null=False)
-    is_bot = BooleanField()
-    first_name = TextField()
-    last_name = TextField()
-    username = TextField()
-    language_code = TextField()
+    is_bot = BooleanField(null=True)
+    first_name = TextField(null=True)
+    last_name = TextField(null=True)
+    username = TextField(null=True)
+    language_code = TextField(null=True)
     ts = DateTimeField(default=datetime.datetime.now)
 
     class Meta:
@@ -56,7 +56,7 @@ class Chat(BaseModel):
     '''
 
     id = PrimaryKeyField(null=False)
-    type = TextField()
+    type = TextField(null=True)
     user_id = IntegerField()
 
     class Meta:
@@ -69,9 +69,9 @@ class Session(BaseModel):
     '''
 
     chat_id = PrimaryKeyField(null=False)
-    node_name = TextField()
+    node_name = TextField(null=True)
     ts = DateTimeField(default=datetime.datetime.now)
-    tags = BinaryJSONField()
+    tags = BinaryJSONField(null=True)
 
     class Meta:
         db_table = "session"
@@ -84,8 +84,8 @@ class Message(BaseModel):
 
     id = PrimaryKeyField(null=False)
     chat_id = IntegerField()
-    type = TextField()
-    date = IntegerField()
+    type = TextField(null=True)
+    date = IntegerField(null=True)
 
     text = TextField(null=True)
     button = TextField(null=True)
